@@ -8,6 +8,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Disk joyini bo'shatish
+        run: sudo rm -rf /usr/share/dotnet /opt/ghc || true
+
       - name: Kodni yuklab olish
         uses: actions/checkout@v4
         with:
@@ -19,14 +22,14 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Android SDK 33, NDK 21 va CMake o'rnatish
+      - name: Android SDK 33, Build-Tools 33.0.1, NDK 21 va CMake o'rnatish
         run: |
           SDK_MANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           yes | $SDK_MANAGER --licenses > /dev/null 2>&1 || true
-          $SDK_MANAGER "build-tools;30.0.3" "build-tools;33.0.0" "platforms;android-33" "platform-tools" "ndk;21.4.7075529" "cmake;3.10.2.4988404"
-          cp "$ANDROID_HOME/build-tools/30.0.3/dx" "$ANDROID_HOME/build-tools/33.0.0/dx"
-          mkdir -p "$ANDROID_HOME/build-tools/33.0.0/lib"
-          cp "$ANDROID_HOME/build-tools/30.0.3/lib/dx.jar" "$ANDROID_HOME/build-tools/33.0.0/lib/dx.jar" || true
+          $SDK_MANAGER "build-tools;30.0.3" "build-tools;33.0.1" "platforms;android-33" "platform-tools" "ndk;21.4.7075529" "cmake;3.10.2.4988404"
+          cp "$ANDROID_HOME/build-tools/30.0.3/dx" "$ANDROID_HOME/build-tools/33.0.1/dx" || true
+          mkdir -p "$ANDROID_HOME/build-tools/33.0.1/lib"
+          cp "$ANDROID_HOME/build-tools/30.0.3/lib/dx.jar" "$ANDROID_HOME/build-tools/33.0.1/lib/dx.jar" || true
           echo "sdk.dir=$ANDROID_HOME" > local.properties
           echo "ndk.dir=$ANDROID_HOME/ndk/21.4.7075529" >> local.properties
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/21.4.7075529" >> $GITHUB_ENV
@@ -37,11 +40,19 @@ jobs:
           distribution: temurin
           java-version: 11
 
-      - name: API kalitlarni ulash
+      - name: Imzo (Keystore) va API kalitlarni yaratish
         env:
           APP_ID: ${{ secrets.APP_ID }}
           APP_HASH: ${{ secrets.APP_HASH }}
         run: |
+          mkdir -p TMessagesProj/config
+          rm -f TMessagesProj/config/extera.jks
+          keytool -genkeypair -v -keystore TMessagesProj/config/extera.jks \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -alias suhbatgram \
+            -storepass suhbatgram123 -keypass suhbatgram123 \
+            -dname "CN=SuhbatGram, OU=Dev, O=SuhbatGram, L=Tashkent, S=Tashkent, C=UZ"
+
           python3 - << 'EOF'
           import os, re
 
@@ -53,11 +64,17 @@ jobs:
           if not app_hash:
               raise SystemExit("ERROR: APP_HASH bo'sh!")
 
-          with open("API_KEYS", "w", encoding="utf-8") as f:
-              f.write(f'APP_ID={app_id}\nAPP_HASH="{app_hash}"\nMAPS_V2_API=none\n')
+          keys = (
+              f'APP_ID={app_id}\n'
+              f'APP_HASH="{app_hash}"\n'
+              f'MAPS_V2_API=none\n'
+              f'SIGNING_KEY_STORE_PASSWORD=suhbatgram123\n'
+              f'SIGNING_KEY_ALIAS=suhbatgram\n'
+              f'SIGNING_KEY_PASSWORD=suhbatgram123\n'
+          )
 
-          with open("local.properties", "a", encoding="utf-8") as f:
-              f.write(f'APP_ID={app_id}\nAPP_HASH="{app_hash}"\nMAPS_V2_API=none\n')
+          with open("API_KEYS", "w", encoding="utf-8") as f:
+              f.write(keys)
 
           path = "TMessagesProj/src/main/java/org/telegram/messenger/BuildVars.java"
           if os.path.exists(path):
@@ -72,8 +89,8 @@ jobs:
       - name: Gradle ruxsatini berish
         run: chmod +x gradlew
 
-      - name: APK yig'ish
-        run: ./gradlew assembleAfatDebug --no-daemon
+      - name: APK yig'ish (arm64-v8a)
+        run: ./gradlew assembleArm64Release --no-daemon
 
       - name: Tayyor APK ni saqlash
         uses: actions/upload-artifact@v4
