@@ -1,0 +1,56 @@
+name: Build SuhbatGram APK
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Kodni yuklab olish
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Java 11 sozlash
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 11
+
+      - name: Android SDK 33 va NDK 21 o'rnatish
+        run: |
+          SDK_MANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | $SDK_MANAGER --licenses > /dev/null || true
+          $SDK_MANAGER "build-tools;30.0.3" "build-tools;33.0.0" "platforms;android-33" "platform-tools" "ndk;21.4.7075529"
+          cp "$ANDROID_HOME/build-tools/30.0.3/dx" "$ANDROID_HOME/build-tools/33.0.0/dx"
+          mkdir -p "$ANDROID_HOME/build-tools/33.0.0/lib"
+          cp "$ANDROID_HOME/build-tools/30.0.3/lib/dx.jar" "$ANDROID_HOME/build-tools/33.0.0/lib/dx.jar" || true
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+          echo "ndk.dir=$ANDROID_HOME/ndk/21.4.7075529" >> local.properties
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/21.4.7075529" >> $GITHUB_ENV
+
+      - name: API kalitlarni ulash
+        env:
+          APP_ID: ${{ secrets.APP_ID }}
+          APP_HASH: ${{ secrets.APP_HASH }}
+        run: |
+          echo "APP_ID=$APP_ID" >> local.properties
+          echo "APP_HASH=$APP_HASH" >> local.properties
+          if [ -f TMessagesProj/src/main/java/org/telegram/messenger/BuildVars.java ]; then
+            sed -i "s/public static int APP_ID = .*/public static int APP_ID = $APP_ID;/" TMessagesProj/src/main/java/org/telegram/messenger/BuildVars.java
+            sed -i "s/public static String APP_HASH = .*/public static String APP_HASH = \"$APP_HASH\";/" TMessagesProj/src/main/java/org/telegram/messenger/BuildVars.java
+          fi
+
+      - name: Gradle ruxsatini berish
+        run: chmod +x gradlew
+
+      - name: APK yig'ish
+        run: ./gradlew assembleAfatDebug --no-daemon
+
+      - name: Tayyor APK ni saqlash
+        uses: actions/upload-artifact@v4
+        with:
+          name: SuhbatGram-APK
+          path: "**/build/outputs/apk/**/*.apk"
