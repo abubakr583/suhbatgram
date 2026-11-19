@@ -19,11 +19,11 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Android SDK 33 va NDK 21 o'rnatish
+      - name: Android SDK 33, NDK 21 va CMake o'rnatish
         run: |
           SDK_MANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           yes | $SDK_MANAGER --licenses > /dev/null 2>&1 || true
-          $SDK_MANAGER "build-tools;30.0.3" "build-tools;33.0.0" "platforms;android-33" "platform-tools" "ndk;21.4.7075529"
+          $SDK_MANAGER "build-tools;30.0.3" "build-tools;33.0.0" "platforms;android-33" "platform-tools" "ndk;21.4.7075529" "cmake;3.10.2.4988404"
           cp "$ANDROID_HOME/build-tools/30.0.3/dx" "$ANDROID_HOME/build-tools/33.0.0/dx"
           mkdir -p "$ANDROID_HOME/build-tools/33.0.0/lib"
           cp "$ANDROID_HOME/build-tools/30.0.3/lib/dx.jar" "$ANDROID_HOME/build-tools/33.0.0/lib/dx.jar" || true
@@ -46,15 +46,18 @@ jobs:
           import os, re
 
           app_id = "".join(os.environ.get("APP_ID", "").split())
-          app_hash = "".join(os.environ.get("APP_HASH", "").split())
+          app_hash = "".join(os.environ.get("APP_HASH", "").split()).strip('"').strip("'")
 
           if not app_id.isdigit():
               raise SystemExit("ERROR: APP_ID faqat raqamlardan iborat bo'lishi kerak!")
           if not app_hash:
               raise SystemExit("ERROR: APP_HASH bo'sh!")
 
+          with open("API_KEYS", "w", encoding="utf-8") as f:
+              f.write(f'APP_ID={app_id}\nAPP_HASH="{app_hash}"\nMAPS_V2_API=none\n')
+
           with open("local.properties", "a", encoding="utf-8") as f:
-              f.write(f"APP_ID={app_id}\nAPP_HASH={app_hash}\n")
+              f.write(f'APP_ID={app_id}\nAPP_HASH="{app_hash}"\nMAPS_V2_API=none\n')
 
           path = "TMessagesProj/src/main/java/org/telegram/messenger/BuildVars.java"
           if os.path.exists(path):
