@@ -13,16 +13,16 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Java 11 sozlash
+      - name: SDK uchun Java 17 sozlash
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 11
+          java-version: 17
 
       - name: Android SDK 33 va NDK 21 o'rnatish
         run: |
           SDK_MANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
-          yes | $SDK_MANAGER --licenses > /dev/null || true
+          yes | $SDK_MANAGER --licenses > /dev/null 2>&1 || true
           $SDK_MANAGER "build-tools;30.0.3" "build-tools;33.0.0" "platforms;android-33" "platform-tools" "ndk;21.4.7075529"
           cp "$ANDROID_HOME/build-tools/30.0.3/dx" "$ANDROID_HOME/build-tools/33.0.0/dx"
           mkdir -p "$ANDROID_HOME/build-tools/33.0.0/lib"
@@ -30,6 +30,12 @@ jobs:
           echo "sdk.dir=$ANDROID_HOME" > local.properties
           echo "ndk.dir=$ANDROID_HOME/ndk/21.4.7075529" >> local.properties
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/21.4.7075529" >> $GITHUB_ENV
+
+      - name: Gradle uchun Java 11 sozlash
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 11
 
       - name: API kalitlarni ulash
         env:
