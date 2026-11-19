@@ -42,12 +42,29 @@ jobs:
           APP_ID: ${{ secrets.APP_ID }}
           APP_HASH: ${{ secrets.APP_HASH }}
         run: |
-          echo "APP_ID=$APP_ID" >> local.properties
-          echo "APP_HASH=$APP_HASH" >> local.properties
-          if [ -f TMessagesProj/src/main/java/org/telegram/messenger/BuildVars.java ]; then
-            sed -i "s/public static int APP_ID = .*/public static int APP_ID = $APP_ID;/" TMessagesProj/src/main/java/org/telegram/messenger/BuildVars.java
-            sed -i "s/public static String APP_HASH = .*/public static String APP_HASH = \"$APP_HASH\";/" TMessagesProj/src/main/java/org/telegram/messenger/BuildVars.java
-          fi
+          python3 - << 'EOF'
+          import os, re
+
+          app_id = "".join(os.environ.get("APP_ID", "").split())
+          app_hash = "".join(os.environ.get("APP_HASH", "").split())
+
+          if not app_id.isdigit():
+              raise SystemExit("ERROR: APP_ID faqat raqamlardan iborat bo'lishi kerak!")
+          if not app_hash:
+              raise SystemExit("ERROR: APP_HASH bo'sh!")
+
+          with open("local.properties", "a", encoding="utf-8") as f:
+              f.write(f"APP_ID={app_id}\nAPP_HASH={app_hash}\n")
+
+          path = "TMessagesProj/src/main/java/org/telegram/messenger/BuildVars.java"
+          if os.path.exists(path):
+              with open(path, "r", encoding="utf-8") as f:
+                  content = f.read()
+              content = re.sub(r"public static int APP_ID = .*?;", f"public static int APP_ID = {app_id};", content)
+              content = re.sub(r"public static String APP_HASH = .*?;", f'public static String APP_HASH = "{app_hash}";', content)
+              with open(path, "w", encoding="utf-8") as f:
+                  f.write(content)
+          EOF
 
       - name: Gradle ruxsatini berish
         run: chmod +x gradlew
