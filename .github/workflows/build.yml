@@ -572,7 +572,6 @@ jobs:
           }
           '''.replace("__SEND_CALL__", send_call if send_call else "// no send call")
 
-          # Heredoc boshidagi 10 ta bo'shliqni olib tashlash
           suhbat_lines = [line[10:] if line.startswith("          ") else line for line in suhbat_java.splitlines()]
           with open("TMessagesProj/src/main/java/com/exteragram/messenger/SuhbatConfig.java", "w", encoding="utf-8") as f:
               f.write("\n".join(suhbat_lines) + "\n")
@@ -630,7 +629,6 @@ jobs:
               with open(mc_path, "r", encoding="utf-8", errors="ignore") as f:
                   mc = f.read()
 
-              # Anti-Delete: TL_updateDeleteMessages va TL_updateDeleteChannelMessages bloklarini himoyalash
               for cls in ("TL_updateDeleteMessages", "TL_updateDeleteChannelMessages"):
                   pat = re.compile(r"\binstanceof\s+TLRPC\." + cls + r"\s*\)\s*\{")
                   pos = 0
@@ -645,15 +643,22 @@ jobs:
                           break
                       inner = mc[ob + 1 : cb]
                       if "SuhbatConfig.isAntiDelete" not in inner:
-                          wrapped = "\n if (!com.exteragram.messenger.SuhbatConfig.isAntiDelete()) { " + inner + " }\n"
-                          mc = mc[: ob + 1] + wrapped + mc[cb:]
-                          pos = ob + 1 + len(wrapped) + 1
+                          ret_m = re.search(r"\breturn\s+([^;]+);", inner)
+                          if ret_m:
+                              rv = ret_m.group(1).strip()
+                              ret_val = "true" if rv in ("true", "false") else rv
+                              ins = f"\n if (com.exteragram.messenger.SuhbatConfig.isAntiDelete()) {{ return {ret_val}; }}\n"
+                              mc = mc[: ob + 1] + ins + mc[ob + 1 :]
+                              pos = cb + len(ins) + 1
+                          else:
+                              wrapped = "\n if (!com.exteragram.messenger.SuhbatConfig.isAntiDelete()) { " + inner + " }\n"
+                              mc = mc[: ob + 1] + wrapped + mc[cb:]
+                              pos = ob + 1 + len(wrapped) + 1
                           count += 1
                       else:
                           pos = cb + 1
                   print(f"PATCHED Anti-Delete ({cls}): {count}")
 
-              # Direct Avto-Javob: processUpdateArray ichidagi TL_updateNewMessage
               pua = mc.find("processUpdateArray(")
               if pua != -1:
                   m = re.search(r"(\w+)\s+instanceof\s+TLRPC\.TL_updateNewMessage\s*\)\s*\{", mc[pua:])
@@ -667,7 +672,7 @@ jobs:
               with open(mc_path, "w", encoding="utf-8") as f:
                   f.write(mc)
 
-          # 8. SuhbatGram Sozlamalari tugmasini Yon menyu (Drawer) va Sozlamalar (ProfileActivity) ga qo'shish
+          # 8. SuhbatGram Sozlamalari tugmasini Yon menyu va Sozlamalarga qo'shish
           dla_path = "TMessagesProj/src/main/java/org/telegram/ui/Adapters/DrawerLayoutAdapter.java"
           la_path = "TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java"
           if os.path.exists(dla_path) and os.path.exists(la_path):
