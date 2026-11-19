@@ -31,7 +31,6 @@ jobs:
           mkdir -p "$ANDROID_HOME/build-tools/33.0.1/lib"
           cp "$ANDROID_HOME/build-tools/30.0.3/lib/dx.jar" "$ANDROID_HOME/build-tools/33.0.1/lib/dx.jar" || true
           echo "sdk.dir=$ANDROID_HOME" > local.properties
-          echo "ndk.dir=$ANDROID_HOME/ndk/21.4.7075529" >> local.properties
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/21.4.7075529" >> $GITHUB_ENV
 
       - name: Gradle uchun Java 11 sozlash
@@ -40,7 +39,7 @@ jobs:
           distribution: temurin
           java-version: 11
 
-      - name: Imzo (Keystore) va API kalitlarni yaratish
+      - name: Keystore, API kalitlar va boost klasslarini yaratish
         env:
           APP_ID: ${{ secrets.APP_ID }}
           APP_HASH: ${{ secrets.APP_HASH }}
@@ -84,6 +83,105 @@ jobs:
               content = re.sub(r"public static String APP_HASH = .*?;", f'public static String APP_HASH = "{app_hash}";', content)
               with open(path, "w", encoding="utf-8") as f:
                   f.write(content)
+
+          names_decl = "public static CharSequence[] names = new CharSequence[0];"
+          for root, _, files in os.walk("TMessagesProj/src/main/java"):
+              if "PopupUtils.java" in files:
+                  with open(os.path.join(root, "PopupUtils.java"), "r", encoding="utf-8") as f:
+                      pu = f.read()
+                  for params in re.findall(r"showDialog\s*\(([^)]+)\)", pu, re.S):
+                      parts = [p.strip() for p in params.split(",")]
+                      if len(parts) == 5 and "Context" in parts[3]:
+                          t = parts[0]
+                          if "ArrayList<CharSequence>" in t:
+                              names_decl = "public static java.util.ArrayList<CharSequence> names = new java.util.ArrayList<>();"
+                          elif "ArrayList" in t:
+                              names_decl = "public static java.util.ArrayList<String> names = new java.util.ArrayList<>();"
+                          elif "List<CharSequence>" in t:
+                              names_decl = "public static java.util.List<CharSequence> names = new java.util.ArrayList<>();"
+                          elif "List" in t:
+                              names_decl = "public static java.util.List<String> names = new java.util.ArrayList<>();"
+                          elif "String[]" in t:
+                              names_decl = "public static String[] names = new String[0];"
+                          else:
+                              names_decl = "public static CharSequence[] names = new CharSequence[0];"
+                          break
+                  break
+
+          base = "TMessagesProj/src/main/java/com/exteragram/messenger/boost"
+          os.makedirs(f"{base}/filter", exist_ok=True)
+          os.makedirs(f"{base}/encryption", exist_ok=True)
+
+          with open(f"{base}/BoostController.java", "w", encoding="utf-8") as f:
+              f.write(
+                  "package com.exteragram.messenger.boost;\n\n"
+                  "public class BoostController {\n"
+                  "    public static boolean isUserBooster() {\n"
+                  "        return false;\n"
+                  "    }\n"
+                  "}\n"
+              )
+
+          with open(f"{base}/filter/ZalgoFilter.java", "w", encoding="utf-8") as f:
+              f.write(
+                  "package com.exteragram.messenger.boost.filter;\n\n"
+                  "public class ZalgoFilter {\n"
+                  "    public static CharSequence filterMessage(CharSequence cs) {\n"
+                  "        return cs;\n"
+                  "    }\n"
+                  "    public static String filterMessage(String s) {\n"
+                  "        return s;\n"
+                  "    }\n"
+                  "}\n"
+              )
+
+          with open(f"{base}/encryption/BaseEncryptor.java", "w", encoding="utf-8") as f:
+              f.write(
+                  "package com.exteragram.messenger.boost.encryption;\n\n"
+                  "public class BaseEncryptor {\n"
+                  "    public String getName() {\n"
+                  "        return \"\";\n"
+                  "    }\n"
+                  "}\n"
+              )
+
+          with open(f"{base}/encryption/EncryptionHelper.java", "w", encoding="utf-8") as f:
+              f.write(
+                  "package com.exteragram.messenger.boost.encryption;\n\n"
+                  "import org.telegram.messenger.MessageObject;\n\n"
+                  "public class EncryptionHelper {\n"
+                  f"    {names_decl}\n\n"
+                  "    public interface Callback {\n"
+                  "        void run(String message);\n"
+                  "    }\n\n"
+                  "    public static BaseEncryptor getEncryptorBy(long dialogId) {\n"
+                  "        return new BaseEncryptor();\n"
+                  "    }\n\n"
+                  "    public static int getEncryptorTypeFor(long dialogId) {\n"
+                  "        return 0;\n"
+                  "    }\n\n"
+                  "    public static void setEncryptorTypeFor(long dialogId, int type) {\n"
+                  "    }\n\n"
+                  "    public static void encryptMessage(String text, long dialogId, int type, Callback callback) {\n"
+                  "        if (callback != null) callback.run(text);\n"
+                  "    }\n\n"
+                  "    public static String encryptMessage(String text, long dialogId, BaseEncryptor encryptor) {\n"
+                  "        return text;\n"
+                  "    }\n\n"
+                  "    public static boolean isEncrypted(CharSequence text) {\n"
+                  "        return false;\n"
+                  "    }\n\n"
+                  "    public static boolean isEncrypted(MessageObject messageObject, Object group) {\n"
+                  "        return false;\n"
+                  "    }\n\n"
+                  "    public static MessageObject decryptMessage(MessageObject messageObject) {\n"
+                  "        return messageObject;\n"
+                  "    }\n\n"
+                  "    public static MessageObject decryptMessage(MessageObject messageObject, Object group) {\n"
+                  "        return messageObject;\n"
+                  "    }\n"
+                  "}\n"
+              )
           EOF
 
       - name: Gradle ruxsatini berish
@@ -91,8 +189,8 @@ jobs:
 
       - name: APK yig'ish (arm64-v8a)
         env:
-          GRADLE_OPTS: "-Xmx6g -Xss16m"
-        run: ./gradlew assembleArm64Release --no-daemon -Dorg.gradle.jvmargs="-Xmx6g -Xss16m"
+          GRADLE_OPTS: "-Xmx5g -Xss16m"
+        run: ./gradlew assembleArm64Release --no-daemon --no-configuration-cache -Dorg.gradle.jvmargs="-Xmx5g -Xss16m"
 
       - name: Tayyor APK ni saqlash
         uses: actions/upload-artifact@v4
